@@ -1,0 +1,51 @@
+# Aplica as correções pedidas pela página (botão "Aplicar correção").
+# A página grava um pedido cifrado em pedidos/; este Action aplica com o Claude e devolve
+# uma PROPOSTA cifrada em propostas/. Nada é publicado aqui: o editor revisa e publica pela página.
+# Segredos: PAUTA_SENHA (a mesma senha da página) e ANTHROPIC_API_KEY.
+name: Aplicar correção
+
+on:
+  push:
+    branches: [main]
+    paths: ["pedidos/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pauta
+  cancel-in-progress: false
+
+jobs:
+  aplicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instala a cifra e o SDK da Anthropic
+        run: pip install --quiet anthropic cryptography
+
+      - name: Gera as propostas
+        env:
+          PAUTA_SENHA: ${{ secrets.PAUTA_SENHA }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/acao.py | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Grava as propostas
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A pedidos propostas
+          if git diff --cached --quiet; then echo "Nada mudou"; exit 0; fi
+          git commit -m "Proposta de correção"
+          for i in 1 2 3; do
+            git pull --rebase --quiet && git push && exit 0
+            sleep 5
+          done
+          exit 1

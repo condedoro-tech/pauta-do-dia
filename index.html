@@ -16,6 +16,7 @@
   --tag-conf-bg:#5a3fb0; --tag-conf-fg:#ffffff;
   --tag-frila-bg:#dbe8ff; --tag-frila-fg:#123a7a; --tag-frila-line:#5b85c9;
   --foco:#1d4ed8;
+  --dif-mais:#dcf3e2; --dif-menos:#fde3e6;
 }
 @media (prefers-color-scheme: dark){
   :root{
@@ -28,6 +29,7 @@
     --tag-conf-bg:#8f7aff; --tag-conf-fg:#0e0826;
     --tag-frila-bg:#13284d; --tag-frila-fg:#b9d3ff; --tag-frila-line:#4f78bd;
     --foco:#7aa2ff;
+    --dif-mais:#163a22; --dif-menos:#45161d;
   }
 }
 *{box-sizing:border-box}
@@ -104,7 +106,26 @@ main{padding:16px 0 48px}
 .card.corr textarea{width:100%;min-height:110px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);resize:vertical}
 .card.corr .acoes{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
 .card.corr .status{font-size:13px;color:var(--muted)}
-.card.corr .mudou{background:var(--alerta-bg);color:var(--alerta-fg);border:1px solid var(--alerta-line);padding:6px 10px;border-radius:6px;font-size:14px;margin-bottom:8px}
+.card.corr .token{margin-top:12px;font-size:14px}
+.card.corr .token summary{cursor:pointer;color:var(--muted)}
+.card.corr .token input{flex:1 1 240px;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.token-ok{font-size:13px;color:var(--muted);margin:10px 0 0}
+.link{all:unset;cursor:pointer;text-decoration:underline;color:var(--fg)}
+.prop{border:1px solid var(--line);border-left:6px solid var(--foco);border-radius:6px;padding:10px 12px;margin-top:12px;background:var(--bg)}
+.prop.esperando{border-left-color:var(--alerta-line)}
+.prop.erro{border-left-color:var(--nome)}
+.prop-cab{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin-bottom:6px}
+.prop-corr{font-size:14px;margin-bottom:8px}
+.prop textarea{min-height:240px;font:13px/1.45 ui-monospace,Consolas,monospace;margin-top:6px}
+.dif{border:1px solid var(--line);border-radius:6px;overflow:hidden;font-size:14px;margin:8px 0}
+.dif>div{padding:2px 8px 2px 26px;position:relative;overflow-wrap:anywhere}
+.dif-sinal{position:absolute;left:8px;font-weight:700}
+.dif-mais{background:var(--dif-mais)}
+.dif-menos{background:var(--dif-menos);text-decoration:line-through;text-decoration-color:var(--muted)}
+.dif-igual{color:var(--muted)}
+.dif-pulo{color:var(--muted);text-align:center;padding:0!important;background:var(--soft)}
+.ajuste summary{cursor:pointer;font-size:14px;color:var(--muted)}
+.prop .mudou,.card.corr .mudou{background:var(--alerta-bg);color:var(--alerta-fg);border:1px solid var(--alerta-line);padding:6px 10px;border-radius:6px;font-size:14px;margin-bottom:8px}
 
 /* nomes e etiquetas */
 .nome{all:unset;cursor:pointer;color:var(--nome);font-weight:700;border-radius:2px}
@@ -200,7 +221,6 @@ main{padding:16px 0 48px}
 <div id="impressao"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="data.js"></script>
 <script>
 "use strict";
 
@@ -222,7 +242,9 @@ const sess = {
 function hash(s){ let h = 2166136261; for (let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
 function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), 1800); }
 const b64d = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-const b64e = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+const b64e = u => { const b = new Uint8Array(u); let s = ""; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
+const b64utf8 = t => b64e(new TextEncoder().encode(t));
+const utf8de64 = s => new TextDecoder().decode(b64d(s.replace(/\s/g, "")));
 
 const DIAS_SEMANA = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
 const DIAS_CURTO = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -243,6 +265,14 @@ async function decifrar(bits, pacote){
   return JSON.parse(new TextDecoder().decode(claro));
 }
 const CHAVE_SESS = () => "pauta-chave:" + (window.PAUTA_CIFRADA ? window.PAUTA_CIFRADA.sal : "");
+let CHAVE = null; // {bits, sal, iter}: fica só na memória, para cifrar pedidos e publicar
+function guardarChave(bits, pacote){ CHAVE = {bits, sal:pacote.sal, iter:pacote.iter || 600000}; }
+async function cifrarObj(obj){
+  const k = await crypto.subtle.importKey("raw", CHAVE.bits, "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const c = await crypto.subtle.encrypt({name:"AES-GCM", iv}, k, new TextEncoder().encode(JSON.stringify(obj)));
+  return {v:1, iter:CHAVE.iter, sal:CHAVE.sal, iv:b64e(iv), dados:b64e(c)};
+}
 
 async function iniciar(){
   const pacote = window.PAUTA_CIFRADA;
@@ -257,7 +287,7 @@ async function iniciar(){
   }
   const salva = sess.get(CHAVE_SESS());
   if (salva){
-    try { abrir(await decifrar(b64d(salva), pacote)); return; } catch(e){ sess.del(CHAVE_SESS()); }
+    try { const bits = b64d(salva); const d = await decifrar(bits, pacote); guardarChave(bits, pacote); abrir(d); return; } catch(e){ sess.del(CHAVE_SESS()); }
   }
   $("#senha").focus();
 }
@@ -270,6 +300,7 @@ $("#form-senha").addEventListener("submit", async ev => {
     const bits = await chaveDeSenha($("#senha").value, pacote);
     const dados = await decifrar(bits, pacote);
     if ($("#manter").checked) sess.set(CHAVE_SESS(), b64e(bits));
+    guardarChave(bits, pacote);
     $("#senha").value = "";
     abrir(dados);
   } catch(e){
@@ -469,16 +500,27 @@ function cartaoCorrecao(data, texto){
   let salvo = {};
   try { salvo = JSON.parse(store.get(k) || "{}"); } catch(e){}
   const mudou = salvo.texto && salvo.base && salvo.base !== hash(texto);
+  const tem = !!token();
   return `<section class="card corr" data-dia="${data}">
     <h3>Correções desta pauta</h3>
     ${mudou ? `<div class="mudou">A pauta foi atualizada depois que esta correção foi escrita. Se ela já foi aplicada, limpe o campo.</div>` : ""}
     <textarea data-corr="${data}" aria-label="Correções para ${esc(rotuloLongo(data))}" placeholder="Uma correção por linha. Ex.: Relato de Flamengo x Athletico passa para [nome]; [nome] faz o personagem.">${esc(salvo.texto || "")}</textarea>
     <div class="acoes">
+      ${tem ? `<button class="btn prim" type="button" data-acao="aplicar" data-dia="${data}">Aplicar correção</button>` : ""}
       <button class="btn" type="button" data-acao="copiar-pedido" data-dia="${data}">Copiar pedido para o Claude</button>
-      <button class="btn" type="button" data-acao="baixar-corr">Baixar correções da semana</button>
+      ${tem ? `<button class="btn" type="button" data-acao="editar-texto" data-dia="${data}">Editar texto do dia</button>` : ""}
       <button class="btn" type="button" data-acao="limpar-corr" data-dia="${data}">Limpar</button>
       <span class="status" data-status="${data}">${salvo.texto ? "Salvo neste navegador." : ""}</span>
     </div>
+    <div data-propostas="${data}">${htmlPropostas(data)}</div>
+    <div data-editor="${data}"></div>
+    ${tem
+      ? `<p class="token-ok">Token do GitHub salvo neste navegador. <button class="link" type="button" data-acao="esquecer-token">Esquecer token</button></p>`
+      : `<details class="token"><summary>Ativar “Aplicar correção” neste navegador</summary>
+          <p>Cole o token do GitHub (começa com <code>github_pat_</code>). Ele fica salvo só neste navegador; só quem edita a pauta precisa dele.</p>
+          <div class="acoes"><input type="password" data-token-input aria-label="Token do GitHub" autocomplete="off" placeholder="github_pat_…">
+          <button class="btn" type="button" data-acao="salvar-token">Salvar token</button></div>
+        </details>`}
   </section>`;
 }
 
@@ -492,6 +534,7 @@ function renderDia(data, op = {}){
 
 /* ---------- estado e telas ---------- */
 let DADOS = null, PARSE = {}, DATAS = [], VISTA = "semana";
+let PROPOSTAS = {}, PEDIDOS = {};   // vindos do GitHub: {data: [...]}
 
 function resumoDia(d){
   const secs = PARSE[d];
@@ -509,7 +552,12 @@ function resumoDia(d){
   const feitas = itens.filter((it, i) => store.get(`pauta-pend:${d}:${i}:${hash(it)}`) === "1").length;
   let corr = "";
   try { corr = (JSON.parse(store.get("pauta-corr:" + d) || "{}").texto || "").trim(); } catch(e){}
-  return {alertas:contarAlertas(al), evento:descreve(ev), especial:descreve(es), pend:itens.length, feitas, corr:!!corr};
+  let estado = corr ? "rascunho" : "—";
+  const props = PROPOSTAS[d] || [];
+  if (props.some(p => p.status === "erro")) estado = "erro";
+  if (props.some(p => p.status === "ok")) estado = "proposta pronta";
+  if ((PEDIDOS[d] || []).length) estado = "aplicando…";
+  return {alertas:contarAlertas(al), evento:descreve(ev), especial:descreve(es), pend:itens.length, feitas, corr:estado};
 }
 
 function montarAbas(){
@@ -530,10 +578,13 @@ function telaSemana(){
       <td data-r="Evento do dia">${fmt(r.evento || "—")}${r.especial ? `<div class="esp">Especial: ${fmt(r.especial)}</div>` : ""}</td>
       <td class="num" data-r="Alertas">${r.alertas ? `<span class="n-alerta">${r.alertas}</span>` : "0"}</td>
       <td class="num" data-r="Pendências">${r.pend}${r.feitas ? ` <small>(${r.feitas} ✓)</small>` : ""}</td>
-      <td class="num" data-r="Correções">${r.corr ? "sim" : "—"}</td>
+      <td class="num" data-r="Correções">${r.corr === "proposta pronta" || r.corr === "erro" ? `<b>${r.corr}</b>` : r.corr}</td>
     </tr>`;
   }).join("");
-  return `<div class="cab-dia"><h2>Semana</h2><span class="aviso">Clique num dia para abrir. Gerado em ${esc((DADOS.geradoEm || "").replace("T", " "))}.</span></div>
+  const soltas = (PROPOSTAS["?"] || []).map(p => `<div class="prop erro"><b>Pedido que não pôde ser lido:</b> ${esc(p.erro || "")} <button class="btn" type="button" data-acao="descartar" data-id="${esc(p.id)}" data-dia="?">Descartar</button></div>`).join("");
+  return `<div class="cab-dia"><h2>Semana</h2>
+    <div class="acoes"><button class="btn" type="button" data-acao="baixar-textos">Baixar textos (.json)</button></div></div>
+  <p class="aviso">Clique num dia para abrir. Atualizado em ${esc((DADOS.geradoEm || "").replace("T", " "))}.</p>${soltas}
   <table class="tabela"><thead><tr><th>Dia</th><th>Evento do dia</th><th class="num">Alertas</th><th class="num">Pendências</th><th class="num">Correções</th></tr></thead><tbody>${linhas}</tbody></table>`;
 }
 
@@ -614,6 +665,7 @@ function abrir(dados){
   const pedido = decodeURIComponent(location.hash.slice(1));
   const hoje = hojeISO();
   irPara(DATAS.includes(pedido) || pedido === "semana" ? pedido : (DATAS.includes(hoje) ? hoje : "semana"), false);
+  atualizarRemoto();
 }
 
 /* ---------- impressão e cópia ---------- */
@@ -649,15 +701,208 @@ ${c || "(nenhuma correção escrita)"}
 PAUTA ATUAL:
 ${DADOS.dias[d]}`;
 }
-function baixarCorrecoes(){
-  const out = {};
-  DATAS.forEach(d => { const t = (lerCorrecao(d).texto || "").trim(); if (t) out[d] = t; });
-  if (!Object.keys(out).length){ toast("Nenhuma correção escrita."); return; }
-  const blob = new Blob([JSON.stringify(out, null, 1)], {type:"application/json"});
+function baixarArquivo(nome, conteudo, tipo){
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = "correcoes.json";
-  document.body.appendChild(a); a.click(); a.remove();
+  a.href = URL.createObjectURL(new Blob([conteudo], {type:tipo}));
+  a.download = nome; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function baixarTextos(){
+  baixarArquivo(`textos-${DATAS[0]}-a-${DATAS[DATAS.length - 1]}.json`, JSON.stringify(DADOS.dias, null, 1), "application/json");
+}
+
+/* ---------- GitHub: aplicar correção, propostas, publicar ---------- */
+const REPO = "condedoro-tech/pauta-do-dia";
+const API = `https://api.github.com/repos/${REPO}/contents/`;
+const token = () => store.get("pauta-gh-token") || "";
+const agoraLocal = () => { const d = new Date(), p = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const hhmm = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${String(d.getHours()).padStart(2,"0")}h${String(d.getMinutes()).padStart(2,"0")}`; };
+
+async function gh(caminho, op = {}){
+  let r;
+  try {
+    r = await fetch(API + caminho, {
+      method: op.method || "GET", cache: "no-store",
+      headers: {Authorization: `Bearer ${token()}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28",
+                ...(op.body ? {"Content-Type": "application/json"} : {})},
+      body: op.body ? JSON.stringify(op.body) : undefined,
+    });
+  } catch(e){ throw new Error("Sem conexão com o GitHub."); }
+  if (r.status === 404 && op.ok404) return null;
+  if (!r.ok){
+    const motivo = {401:"Token inválido ou vencido. Crie outro e salve de novo.",
+                    403:"O token não tem permissão de escrita neste repositório (Contents: Read and write).",
+                    404:"Repositório ou arquivo não encontrado para este token.",
+                    409:"Alguém alterou o arquivo ao mesmo tempo. Tente de novo.",
+                    422:"Alguém alterou o arquivo ao mesmo tempo. Tente de novo."}[r.status] || `GitHub respondeu ${r.status}.`;
+    throw new Error(motivo);
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+const CACHE_REMOTO = new Map(); // sha -> objeto decifrado
+async function lerPasta(pasta){
+  const lista = await gh(pasta, {ok404:true}) || [];
+  const out = [];
+  for (const f of lista.filter(f => f.type === "file" && f.name.endsWith(".json"))){
+    if (!CACHE_REMOTO.has(f.sha)){
+      let obj;
+      try {
+        const arq = await gh(f.path);
+        obj = await decifrar(CHAVE.bits, JSON.parse(utf8de64(arq.content)));
+      } catch(e){ obj = {status:"erro", erro:"arquivo cifrado com outra senha ou corrompido"}; }
+      CACHE_REMOTO.set(f.sha, obj);
+    }
+    out.push({...CACHE_REMOTO.get(f.sha), id:f.name.slice(0, -5), sha:f.sha, caminho:f.path});
+  }
+  return out;
+}
+
+let SONDA = null, SONDA_INICIO = 0;
+async function atualizarRemoto(){
+  if (!token() || !CHAVE) return;
+  try {
+    const [peds, props] = await Promise.all([lerPasta("pedidos"), lerPasta("propostas")]);
+    PEDIDOS = {}; PROPOSTAS = {};
+    peds.forEach(p => (PEDIDOS[p.data || "?"] = PEDIDOS[p.data || "?"] || []).push(p));
+    props.forEach(p => (PROPOSTAS[p.data || "?"] = PROPOSTAS[p.data || "?"] || []).push(p));
+  } catch(e){ toast(e.message); }
+  redesenharRemoto();
+  clearTimeout(SONDA);
+  if (Object.keys(PEDIDOS).length){
+    if (!SONDA_INICIO) SONDA_INICIO = Date.now();
+    if (Date.now() - SONDA_INICIO < 8 * 60000) SONDA = setTimeout(atualizarRemoto, 10000);
+  } else SONDA_INICIO = 0;
+}
+function redesenharRemoto(){
+  document.querySelectorAll("[data-propostas]").forEach(el => el.innerHTML = htmlPropostas(el.dataset.propostas));
+  montarAbas();
+  if (!$("#busca").value.trim() && VISTA === "semana") $("#conteudo").innerHTML = telaSemana();
+}
+
+function diffLinhas(a, b){
+  const A = a.split("\n"), B = b.split("\n"), n = A.length, m = B.length;
+  const L = Array.from({length:n + 1}, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    L[i][j] = A[i] === B[j] ? L[i+1][j+1] + 1 : Math.max(L[i+1][j], L[i][j+1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m){
+    if (A[i] === B[j]){ out.push([" ", A[i]]); i++; j++; }
+    else if (L[i+1][j] >= L[i][j+1]) out.push(["-", A[i++]]);
+    else out.push(["+", B[j++]]);
+  }
+  while (i < n) out.push(["-", A[i++]]);
+  while (j < m) out.push(["+", B[j++]]);
+  return out;
+}
+function htmlDiff(a, b){
+  const d = diffLinhas(a, b);
+  const mostra = d.map((x, k) => x[0] !== " " || (d[k-1] && d[k-1][0] !== " ") || (d[k+1] && d[k+1][0] !== " "));
+  if (!d.some(x => x[0] !== " ")) return `<p class="aviso">Nenhuma mudança no texto.</p>`;
+  let html = "", pulou = false;
+  d.forEach((x, k) => {
+    if (!mostra[k]){ if (!pulou) html += `<div class="dif-pulo">⋯</div>`; pulou = true; return; }
+    pulou = false;
+    if (!x[1].trim() && x[0] === " ") return;
+    const cls = x[0] === "+" ? "dif-mais" : x[0] === "-" ? "dif-menos" : "dif-igual";
+    const sinal = x[0] === "+" ? "+" : x[0] === "-" ? "−" : " ";
+    html += `<div class="${cls}"><span class="dif-sinal" aria-hidden="true">${sinal}</span>${fmt(x[1]) || "&nbsp;"}</div>`;
+  });
+  return `<div class="dif" aria-label="O que muda">${html}</div>`;
+}
+
+function htmlPropostas(d){
+  if (!token()) return "";
+  let html = "";
+  for (const p of PEDIDOS[d] || []){
+    const min = Math.round((Date.now() - new Date(p.em)) / 60000);
+    html += `<div class="prop esperando"><b>Correção enviada${p.em ? " às " + hhmm(p.em) : ""}.</b> O Claude está aplicando; costuma levar de 1 a 3 minutos. Esta área atualiza sozinha.
+      ${min >= 6 ? `<br>Está demorando: confira a aba <b>Actions</b> do repositório (o Action “Aplicar correção” precisa dos segredos PAUTA_SENHA e ANTHROPIC_API_KEY).` : ""}</div>`;
+  }
+  for (const p of PROPOSTAS[d] || []){
+    if (p.status !== "ok"){
+      html += `<div class="prop erro"><b>A correção não foi aplicada:</b> ${esc(p.erro || "erro desconhecido")}
+        <div class="acoes"><button class="btn" type="button" data-acao="descartar" data-id="${esc(p.id)}" data-dia="${d}">Descartar</button></div></div>`;
+      continue;
+    }
+    const velha = p.antes !== DADOS.dias[d];
+    html += `<div class="prop">
+      <div class="prop-cab"><b>Proposta do Claude</b> <span class="aviso">pedida às ${esc(hhmm(p.pedidoEm))} · pronta às ${esc(hhmm(p.em))}</span></div>
+      <div class="prop-corr"><span class="rot">Você pediu:</span> ${esc(p.correcao || "").replace(/\n/g, "<br>")}</div>
+      ${(p.problemas || []).map(x => `<div class="mudou">Atenção: ${fmt(x)}</div>`).join("")}
+      ${velha ? `<div class="mudou">A pauta deste dia mudou depois deste pedido. Descarte e aplique a correção de novo.</div>` : ""}
+      ${htmlDiff(p.antes || "", p.depois || "")}
+      ${velha ? "" : `<details class="ajuste"><summary>Ajustar o texto antes de publicar</summary>
+        <textarea data-prop-texto="${esc(p.id)}" spellcheck="false" aria-label="Texto proposto">${esc(p.depois || "")}</textarea></details>`}
+      <div class="acoes">
+        ${velha ? "" : `<button class="btn prim" type="button" data-acao="publicar" data-id="${esc(p.id)}" data-dia="${d}">Publicar para a equipe</button>`}
+        <button class="btn" type="button" data-acao="descartar" data-id="${esc(p.id)}" data-dia="${d}">Descartar</button>
+      </div></div>`;
+  }
+  return html;
+}
+
+async function aplicar(d, btn){
+  const correcao = ((document.querySelector(`textarea[data-corr="${d}"]`) || {}).value || "").trim();
+  if (!correcao){ toast("Escreva a correção antes de aplicar."); return; }
+  btn.disabled = true; btn.textContent = "Enviando…";
+  try {
+    const id = `${d}-${Date.now().toString(36)}`;
+    const em = new Date().toISOString();
+    const env = await cifrarObj({id, data:d, correcao, em});
+    await gh(`pedidos/${id}.json`, {method:"PUT", body:{message:`Pedido de correção (${d})`, content:b64utf8(JSON.stringify(env))}});
+    (PEDIDOS[d] = PEDIDOS[d] || []).push({id, data:d, em});
+    SONDA_INICIO = Date.now();
+    redesenharRemoto();
+    clearTimeout(SONDA); SONDA = setTimeout(atualizarRemoto, 15000);
+    toast("Correção enviada.");
+  } catch(e){ toast(e.message); }
+  finally { btn.disabled = false; btn.textContent = "Aplicar correção"; }
+}
+
+async function publicar(d, novo, base, origem, btn){
+  if (!novo.trim()){ toast("O texto está vazio."); return false; }
+  if (btn){ btn.disabled = true; btn.textContent = "Publicando…"; }
+  try {
+    const arq = await gh("data.js");
+    const env = JSON.parse(utf8de64(arq.content).match(/=\s*(\{[\s\S]*\})\s*;?\s*$/)[1]);
+    if (env.sal !== CHAVE.sal) throw new Error("O data.js foi gerado de novo com outra senha. Recarregue a página e entre de novo.");
+    const pac = await decifrar(CHAVE.bits, env);
+    if (pac.dias[d] !== base) throw new Error("A pauta deste dia mudou no GitHub enquanto você revisava. Recarregue a página e refaça.");
+    pac.dias[d] = novo;
+    pac.geradoEm = agoraLocal();
+    const novoEnv = await cifrarObj(pac);
+    await gh("data.js", {method:"PUT", body:{message:`Pauta atualizada (${d}, ${origem})`, sha:arq.sha,
+      content:b64utf8("window.PAUTA_CIFRADA = " + JSON.stringify(novoEnv) + ";\n")}});
+    window.PAUTA_CIFRADA = novoEnv;
+    DADOS = pac; PARSE[d] = lerPauta(novo);
+    return true;
+  } catch(e){ toast(e.message); return false; }
+  finally { if (btn){ btn.disabled = false; btn.textContent = "Publicar para a equipe"; } }
+}
+
+async function descartar(d, id){
+  const p = (PROPOSTAS[d] || []).find(x => x.id === id);
+  if (!p) return;
+  try { await gh(p.caminho, {method:"DELETE", body:{message:"Proposta descartada", sha:p.sha}}); }
+  catch(e){ toast(e.message); return; }
+  PROPOSTAS[d] = PROPOSTAS[d].filter(x => x.id !== id);
+}
+
+function abrirEditor(d){
+  const el = document.querySelector(`[data-editor="${d}"]`);
+  if (!el) return;
+  el.dataset.base = DADOS.dias[d];
+  el.innerHTML = `<div class="prop">
+    <div class="prop-cab"><b>Editar texto do dia</b> <span class="aviso">Cole aqui o texto corrigido pelo Claude ou edite à mão. Mantenha as linhas de traços entre as seções.</span></div>
+    <textarea data-editor-texto="${d}" spellcheck="false" aria-label="Texto da pauta">${esc(DADOS.dias[d])}</textarea>
+    <div data-editor-dif="${d}"></div>
+    <div class="acoes">
+      <button class="btn" type="button" data-acao="ver-mudancas" data-dia="${d}">Ver o que muda</button>
+      <button class="btn prim" type="button" data-acao="publicar-edicao" data-dia="${d}">Publicar para a equipe</button>
+      <button class="btn" type="button" data-acao="fechar-editor" data-dia="${d}">Cancelar</button>
+    </div></div>`;
+  el.querySelector("textarea").focus();
 }
 
 /* ---------- eventos ---------- */
@@ -674,8 +919,42 @@ document.addEventListener("click", async ev => {
   if (b.dataset.acao === "copiar-pauta") toast(await copiar(DADOS.dias[d]) ? "Pauta copiada." : "Não foi possível copiar.");
   if (b.dataset.acao === "imprimir-dia") imprimir([d]);
   if (b.dataset.acao === "copiar-pedido") toast(await copiar(pedidoClaude(d)) ? "Pedido copiado. Cole no Claude." : "Não foi possível copiar.");
-  if (b.dataset.acao === "baixar-corr") baixarCorrecoes();
-  if (b.dataset.acao === "limpar-corr"){
+  const acao = b.dataset.acao;
+  if (acao === "baixar-textos") baixarTextos();
+  if (acao === "aplicar") aplicar(d, b);
+  if (acao === "editar-texto") abrirEditor(d);
+  if (acao === "fechar-editor") document.querySelector(`[data-editor="${d}"]`).innerHTML = "";
+  if (acao === "ver-mudancas"){
+    const ed = document.querySelector(`[data-editor="${d}"]`);
+    ed.querySelector(`[data-editor-dif="${d}"]`).innerHTML = htmlDiff(ed.dataset.base, ed.querySelector("textarea").value);
+  }
+  if (acao === "publicar-edicao"){
+    const ed = document.querySelector(`[data-editor="${d}"]`);
+    if (await publicar(d, ed.querySelector("textarea").value.replace(/\r\n/g, "\n").trim(), ed.dataset.base, "edição manual", b)){
+      toast("Publicado. A equipe vê em cerca de 1 minuto."); mostrar();
+    }
+  }
+  if (acao === "publicar"){
+    const p = (PROPOSTAS[d] || []).find(x => x.id === b.dataset.id);
+    const ta = document.querySelector(`textarea[data-prop-texto="${CSS.escape(b.dataset.id)}"]`);
+    const texto = (ta ? ta.value : p.depois).replace(/\r\n/g, "\n").trim();
+    if (p && await publicar(d, texto, p.antes, "correção aplicada", b)){
+      await descartar(d, p.id);
+      store.del("pauta-corr:" + d);
+      toast("Publicado. A equipe vê em cerca de 1 minuto."); mostrar();
+    }
+  }
+  if (acao === "descartar"){ await descartar(d, b.dataset.id); redesenharRemoto(); }
+  if (acao === "salvar-token"){
+    const v = (b.closest(".token").querySelector("[data-token-input]").value || "").trim();
+    if (!/^(github_pat_|ghp_)/.test(v)){ toast("Isso não parece um token do GitHub."); return; }
+    store.set("pauta-gh-token", v);
+    try { await gh("data.js"); toast("Token salvo."); }
+    catch(e){ store.del("pauta-gh-token"); toast(e.message); return; }
+    mostrar(); atualizarRemoto();
+  }
+  if (acao === "esquecer-token"){ store.del("pauta-gh-token"); PEDIDOS = {}; PROPOSTAS = {}; mostrar(); toast("Token apagado deste navegador."); }
+  if (acao === "limpar-corr"){
     store.del("pauta-corr:" + d);
     const ta = document.querySelector(`textarea[data-corr="${d}"]`); if (ta) ta.value = "";
     const m = b.closest(".card").querySelector(".mudou"); if (m) m.remove();
@@ -706,8 +985,15 @@ document.addEventListener("input", ev => {
 $("#form-busca").addEventListener("submit", ev => { ev.preventDefault(); mostrar(); });
 $("#limpar-busca").addEventListener("click", () => { $("#busca").value = ""; mostrar(); $("#busca").focus(); });
 $("#btn-imprimir").addEventListener("click", () => imprimir(DATAS));
+document.addEventListener("visibilitychange", () => { if (!document.hidden && DADOS) atualizarRemoto(); });
 
-iniciar();
+// carrega o data.js sem cache, para a equipe ver a versão nova assim que o site atualizar
+(function(){
+  const s = document.createElement("script");
+  s.src = "data.js?t=" + Date.now();
+  s.onload = s.onerror = () => iniciar();
+  document.head.appendChild(s);
+})();
 </script>
 </body>
 </html>
