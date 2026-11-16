@@ -1,10 +1,12 @@
 # Pauta da Semana — UOL Esporte
 
-Página interna, cifrada (AES-256-GCM, chave por PBKDF2 a partir da senha). Só `index.html` e `data.js` (cifrado) vão para o GitHub; textos, correções e lista de pessoas ficam na sua máquina (`.gitignore`).
+Página interna, cifrada (AES-256-GCM, chave por PBKDF2 a partir da senha). Só `index.html`, `gerar.html` e `data.js` (cifrado) vão para o GitHub; textos e lista de pessoas ficam no seu computador (`.gitignore`).
 
-**Como atualizar**
-1. Edite o `textos*.json` (formato `{"AAAA-MM-DD": "texto da pauta"}`) e, se preciso, o `pessoas.txt`.
-2. Rode `PAUTA_SENHA='sua-senha' python scripts/build.py` (requer `pip install cryptography`).
-3. Recarregue a página (e faça commit/push do `data.js` se ela estiver publicada).
+**Como atualizar (sem instalar nada)**
+1. Abra `gerar.html` (no navegador, do site ou da pasta), escolha o `textos*.json` da semana e o `pessoas.txt`, digite a senha e clique em "Gerar e baixar data.js".
+2. No GitHub: Add file → Upload files → envie só o `data.js` → Commit changes.
+3. Recarregue a página da pauta.
 
-**Correções:** escreva no cartão "Correções desta pauta" de cada dia → "Baixar correções da semana" → `python scripts/corrigir.py correcoes.json` (requer `pip install anthropic` e `ANTHROPIC_API_KEY`; use `--teste` antes para ver o pedido sem gastar) → rode o build de novo. Alternativa sem script: "Copiar pedido para o Claude" e colar no chat.
+**Correções:** escreva no cartão "Correções desta pauta" do dia → "Copiar pedido para o Claude" → cole no chat → cole o texto corrigido no dia certo do `gerar.html` → gere e suba o `data.js` de novo → "Baixar textos corrigidos" para guardar o .json atualizado.
+
+Alternativa com Python: `python scripts/build.py` (gera o data.js) e `python scripts/corrigir.py correcoes.json` (aplica correções via API; `--teste` antes).

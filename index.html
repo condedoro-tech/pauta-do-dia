@@ -247,7 +247,7 @@ const CHAVE_SESS = () => "pauta-chave:" + (window.PAUTA_CIFRADA ? window.PAUTA_C
 async function iniciar(){
   const pacote = window.PAUTA_CIFRADA;
   if (!pacote){
-    $("#erro-senha").textContent = "Arquivo data.js não encontrado. Rode scripts/build.py.";
+    $("#erro-senha").textContent = "Arquivo data.js não encontrado. Gere com gerar.html e coloque ao lado do index.html.";
     $("#btn-abrir").disabled = true;
     return;
   }

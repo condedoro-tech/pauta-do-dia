@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Gerar Pauta Cifrada</title>
+<style>
+:root{--bg:#f4f4f2;--card:#fff;--fg:#141414;--muted:#5b5b5b;--line:#d6d6d2;--ok:#11602f;--ok-bg:#e3f4e8;--erro:#b3001b;--erro-bg:#ffe8eb;--av-bg:#fff4d1;--av-fg:#5a3b00;--av-line:#d99a00;--foco:#1d4ed8}
+@media (prefers-color-scheme: dark){:root{--bg:#121212;--card:#1c1c1c;--fg:#f0f0ee;--muted:#a9a9a4;--line:#3a3a38;--ok:#8fe0a8;--ok-bg:#12301c;--erro:#ff7a85;--erro-bg:#3a1218;--av-bg:#332700;--av-fg:#ffe2a0;--av-line:#c48a00;--foco:#7aa2ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--foco);outline-offset:2px}
+.wrap{max-width:820px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;margin:0 0 14px}
+.card h2{font-size:16px;margin:0 0 10px}
+.passo{display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--fg);color:var(--bg);text-align:center;font-size:14px;line-height:24px;margin-right:6px}
+label.campo{display:block;margin:10px 0 4px;font-weight:600}
+input[type=file]{max-width:100%}
+input[type=password]{width:100%;max-width:360px;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.ajuda{font-size:14px;color:var(--muted);margin:4px 0}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:9px 14px;cursor:pointer}
+.btn.prim{background:var(--fg);color:var(--bg);border-color:var(--fg);font-weight:600}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.msg{border-radius:6px;padding:8px 12px;margin:10px 0 0;font-size:15px}
+.msg.ok{background:var(--ok-bg);color:var(--ok)}
+.msg.erro{background:var(--erro-bg);color:var(--erro)}
+.msg.aviso{background:var(--av-bg);color:var(--av-fg);border:1px solid var(--av-line)}
+details{border-top:1px solid var(--line);padding:8px 0}
+details:first-of-type{border-top:none}
+summary{cursor:pointer;font-weight:600}
+summary small{font-weight:400;color:var(--muted)}
+textarea{width:100%;min-height:260px;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);font:13px/1.45 ui-monospace,Consolas,monospace;resize:vertical;margin-top:8px}
+.acoes{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.oculto{display:none}
+ol.final{margin:6px 0 0;padding-left:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Gerar pauta cifrada</h1>
+  <p class="sub">Substitui o <code>scripts/build.py</code>. Tudo acontece neste navegador: os arquivos e a senha não são enviados a lugar nenhum.</p>
+
+  <section class="card">
+    <h2><span class="passo">1</span>Escolha os arquivos</h2>
+    <label class="campo" for="f-textos">Textos da semana (.json)</label>
+    <input id="f-textos" type="file" accept=".json,application/json">
+    <label class="campo" for="f-pessoas">Lista de pessoas (pessoas.txt)</label>
+    <input id="f-pessoas" type="file" accept=".txt,text/plain">
+    <p class="ajuda">Sem a lista, a pauta abre normalmente, mas os nomes não ficam em vermelho.</p>
+    <div id="msg-arquivos"></div>
+  </section>
+
+  <section class="card oculto" id="card-dias">
+    <h2><span class="passo">2</span>Confira ou corrija os textos <small style="font-weight:400;color:var(--muted)">(opcional)</small></h2>
+    <p class="ajuda">Para aplicar uma correção feita no Claude, cole o texto corrigido no dia certo, substituindo o anterior.</p>
+    <div id="dias"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="passo">3</span>Senha</h2>
+    <label class="campo" for="senha">Senha da pauta (10 caracteres ou mais)</label>
+    <input id="senha" type="password" autocomplete="new-password">
+    <label class="campo" for="senha2">Repita a senha</label>
+    <input id="senha2" type="password" autocomplete="new-password">
+    <p class="ajuda">Use sempre a mesma senha que a equipe já conhece. Não use a senha do Radar.</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="passo">4</span>Gerar</h2>
+    <div class="acoes">
+      <button class="btn prim" id="gerar" type="button" disabled>Gerar e baixar data.js</button>
+      <button class="btn oculto" id="baixar-textos" type="button">Baixar textos corrigidos (.json)</button>
+    </div>
+    <div id="msg-gerar"></div>
+    <div id="depois" class="oculto">
+      <ol class="final">
+        <li>Coloque o <code>data.js</code> baixado na pasta do projeto, ao lado do <code>index.html</code>, e abra o <code>index.html</code> para testar.</li>
+        <li>No GitHub, em <b>Add file → Upload files</b>, envie só o <code>data.js</code> e clique em <b>Commit changes</b>.</li>
+        <li>Se você corrigiu algum texto, baixe também os textos corrigidos e guarde no lugar do arquivo antigo. Nunca envie o .json ao GitHub.</li>
+      </ol>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const semAcento = s => s.normalize("NFD").replace(/\p{M}/gu, "");
+const ITER = 600000;
+const SECOES = ["ALERTAS","EVENTO DO DIA","EVENTOS DO DIA","EVENTO ESPECIAL DO DIA","HOME E ERROS","CANAIS DE WHATSAPP","INVESTIMENTOS DO DIA","AGENDA","JOGOS DO DIA","SETORISTAS","PENDENCIAS"];
+const DIAS = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"];
+let dias = null, original = "", fonte = "", pessoas = [];
+
+function msg(el, tipo, html){ $(el).innerHTML = html ? `<div class="msg ${tipo}">${html}</div>` : ""; }
+function rotulo(iso){ const [y,m,d] = iso.split("-").map(Number); const dt = new Date(y, m-1, d); return `${DIAS[dt.getDay()]} ${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}`; }
+function lerTexto(arq){ return new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = erro; r.readAsText(arq, "utf-8"); }); }
+
+function avisos(d){
+  const out = [];
+  for (const [data, texto] of Object.entries(d)){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)){ out.push(`“${esc(data)}” não é uma data AAAA-MM-DD e será ignorada.`); continue; }
+    for (const bloco of String(texto).split(/^\s*_{3,}\s*$/m)){
+      const pri = (bloco.split(/\r?\n/).find(l => l.trim()) || "").trim();
+      if (pri && !SECOES.some(s => semAcento(pri).toUpperCase().startsWith(s)))
+        out.push(`${rotulo(data)}: seção não reconhecida, vai aparecer como “Outros”: ${esc(pri.slice(0, 60))}`);
+    }
+  }
+  return out;
+}
+
+function mostrarDias(){
+  const datas = Object.keys(dias).sort();
+  $("#dias").innerHTML = datas.map(d => `<details><summary>${rotulo(d)} <small>(${d} · ${dias[d].length} caracteres)</small></summary>
+    <textarea data-dia="${d}" spellcheck="false" aria-label="Texto da pauta de ${rotulo(d)}">${esc(dias[d])}</textarea></details>`).join("");
+  $("#card-dias").classList.remove("oculto");
+}
+
+$("#f-textos").addEventListener("change", async ev => {
+  const arq = ev.target.files[0]; dias = null; atualizar();
+  if (!arq) return;
+  try {
+    original = await lerTexto(arq);
+    const d = JSON.parse(original);
+    if (!d || typeof d !== "object" || Array.isArray(d)) throw new Error("formato");
+    const validas = Object.keys(d).filter(k => typeof d[k] === "string");
+    if (!validas.length) throw new Error("vazio");
+    dias = {}; validas.forEach(k => dias[k] = d[k]);
+    fonte = arq.name;
+    mostrarDias();
+    const av = avisos(dias);
+    msg("#msg-arquivos", av.length ? "aviso" : "ok",
+      `${Object.keys(dias).length} dias carregados de <b>${esc(fonte)}</b>.` + (av.length ? "<br>" + av.join("<br>") : ""));
+  } catch(e){
+    $("#card-dias").classList.add("oculto");
+    msg("#msg-arquivos", "erro", "Não consegui ler este arquivo. Ele precisa ser o .json da pauta, no formato {\"AAAA-MM-DD\": \"texto\"}.");
+  }
+  atualizar();
+});
+
+$("#f-pessoas").addEventListener("change", async ev => {
+  const arq = ev.target.files[0]; pessoas = [];
+  if (!arq) return;
+  const txt = await lerTexto(arq);
+  pessoas = txt.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith("#"))
+    .map(l => l.split("|").map(n => n.trim()).filter(Boolean)).filter(n => n.length);
+  const base = $("#msg-arquivos").innerHTML;
+  msg("#msg-arquivos", "", "");
+  $("#msg-arquivos").innerHTML = base + `<div class="msg ok">${pessoas.length} pessoas carregadas para destaque.</div>`;
+});
+
+document.addEventListener("input", ev => {
+  const d = ev.target.dataset && ev.target.dataset.dia;
+  if (d && dias){ dias[d] = ev.target.value; $("#baixar-textos").classList.remove("oculto"); }
+  atualizar();
+});
+
+function atualizar(){
+  const s1 = $("#senha").value, s2 = $("#senha2").value;
+  $("#gerar").disabled = !(dias && s1.length >= 10 && s1 === s2);
+}
+
+function baixar(nome, conteudo, tipo){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([conteudo], {type:tipo}));
+  a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const b64 = u => { let s = ""; const b = new Uint8Array(u); for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); return btoa(s); };
+
+async function cifrar(texto, senha){
+  const sal = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveKey"]);
+  const chave = await crypto.subtle.deriveKey({name:"PBKDF2", hash:"SHA-256", salt:sal, iterations:ITER}, base, {name:"AES-GCM", length:256}, false, ["encrypt"]);
+  const corpo = await crypto.subtle.encrypt({name:"AES-GCM", iv}, chave, new TextEncoder().encode(texto));
+  return {v:1, iter:ITER, sal:b64(sal), iv:b64(iv), dados:b64(corpo)};
+}
+
+$("#gerar").addEventListener("click", async () => {
+  const s1 = $("#senha").value, s2 = $("#senha2").value;
+  if (s1.length < 10){ msg("#msg-gerar", "erro", "A senha precisa ter 10 caracteres ou mais."); return; }
+  if (s1 !== s2){ msg("#msg-gerar", "erro", "As duas senhas não são iguais."); return; }
+  if (!window.crypto || !crypto.subtle){ msg("#msg-gerar", "erro", "Este navegador não permite cifrar aqui. Use Chrome ou Edge atualizados."); return; }
+  const btn = $("#gerar"); btn.disabled = true; btn.textContent = "Gerando…";
+  try {
+    const agora = new Date();
+    const p = n => String(n).padStart(2, "0");
+    const pacote = {
+      geradoEm: `${agora.getFullYear()}-${p(agora.getMonth()+1)}-${p(agora.getDate())}T${p(agora.getHours())}:${p(agora.getMinutes())}`,
+      fonte, dias, pessoas,
+    };
+    const cifrado = await cifrar(JSON.stringify(pacote), s1);
+    baixar("data.js", "window.PAUTA_CIFRADA = " + JSON.stringify(cifrado) + ";\n", "text/javascript");
+    msg("#msg-gerar", "ok", `data.js gerado: ${Object.keys(dias).length} dias, ${pessoas.length} pessoas.${pessoas.length ? "" : " (sem lista de pessoas: nomes sem destaque)"}`);
+    $("#depois").classList.remove("oculto");
+  } catch(e){
+    msg("#msg-gerar", "erro", "Falhou ao gerar: " + esc(e.message || e));
+  } finally { btn.textContent = "Gerar e baixar data.js"; atualizar(); }
+});
+
+$("#baixar-textos").addEventListener("click", () => {
+  const nome = fonte || "textos.json";
+  baixar(nome, JSON.stringify(dias, null, 1), "application/json");
+});
+</script>
+</body>
+</html>
