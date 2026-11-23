@@ -33,7 +33,9 @@ jobs:
         env:
           PAUTA_CHAVE_PRIVADA: ${{ secrets.PAUTA_CHAVE_PRIVADA }}
           PAUTA_SENHA: ${{ secrets.PAUTA_SENHA }}
-        run: python scripts/importar_semana.py | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          python scripts/importar_semana.py | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Grava
         run: |

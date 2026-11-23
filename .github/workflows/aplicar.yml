@@ -35,7 +35,9 @@ jobs:
         env:
           PAUTA_SENHA: ${{ secrets.PAUTA_SENHA }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python scripts/acao.py | tee -a "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          python scripts/acao.py | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Grava as propostas
         run: |
