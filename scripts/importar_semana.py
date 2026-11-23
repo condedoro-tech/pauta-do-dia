@@ -34,7 +34,13 @@ def main():
     faltam = [n for n, v in (("PAUTA_CHAVE_PRIVADA", pem), ("PAUTA_SENHA", senha)) if not v]
     if faltam:
         sys.exit("ERRO: segredo(s) ausente(s) no repositório: " + ", ".join(faltam))
-    priv = serialization.load_pem_private_key(pem.encode(), password=None)
+    # tolera colagem sem quebras de linha ou sem as linhas BEGIN/END
+    corpo64 = re.sub(r"-----(BEGIN|END)[^-]*-----", "", pem)
+    corpo64 = re.sub(r"[^A-Za-z0-9+/=]", "", corpo64)
+    try:
+        priv = serialization.load_der_private_key(b64d(corpo64), password=None)
+    except Exception:
+        sys.exit(f"ERRO: PAUTA_CHAVE_PRIVADA não é uma chave válida ({len(corpo64)} caracteres úteis; o esperado é 64).")
     pacote = abrir_entrada(json.load(open(entradas[-1], encoding="utf-8")), priv)  # a mais recente vale
     dias = {d: t for d, t in pacote["dias"].items() if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d)}
     if not dias:
