@@ -31,7 +31,7 @@ jobs:
 
       - name: Gera o data.js
         env:
-          PAUTA_CHAVE_PRIVADA: ${{ secrets.PAUTA_CHAVE_PRIVADA }}
+          PAUTA_CHAVE_PRIVADA: ${{ secrets.PAUTA_CHAVE_PRIVADA || secrets.AUTA_CHAVE_PRIVADA }}
           PAUTA_SENHA: ${{ secrets.PAUTA_SENHA }}
         run: |
           set -o pipefail
