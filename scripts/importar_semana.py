@@ -41,24 +41,41 @@ def main():
         priv = serialization.load_der_private_key(b64d(corpo64), password=None)
     except Exception:
         sys.exit(f"ERRO: PAUTA_CHAVE_PRIVADA não é uma chave válida ({len(corpo64)} caracteres úteis; o esperado é 64).")
-    pacote = abrir_entrada(json.load(open(entradas[-1], encoding="utf-8")), priv)  # a mais recente vale
-    dias = {d: t for d, t in pacote["dias"].items() if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d)}
-    if not dias:
-        sys.exit("ERRO: a semana enviada não tem dias válidos.")
+    pacotes = [abrir_entrada(json.load(open(e, encoding="utf-8")), priv) for e in entradas]
+    semanas = [p for p in pacotes if "dias" in p]
+    trocas = [t for p in pacotes if "trocas" in p for t in p["trocas"]]
 
     caminho = os.path.join(RAIZ, "data.js")
     sal, it = os.urandom(16), 600000
+    vigente = None
     if os.path.exists(caminho):
         atual = json.loads(re.search(r"=\s*(\{.*\})\s*;?\s*$", open(caminho, encoding="utf-8").read(), re.S).group(1))
         chave_atual = hashlib.pbkdf2_hmac("sha256", senha.encode(), b64d(atual["sal"]), atual.get("iter", it), 32)
         try:
-            AESGCM(chave_atual).decrypt(b64d(atual["iv"]), b64d(atual["dados"]), None)
+            vigente = json.loads(AESGCM(chave_atual).decrypt(b64d(atual["iv"]), b64d(atual["dados"]), None).decode("utf-8"))
             sal, it = b64d(atual["sal"]), atual.get("iter", it)   # mesma senha: mantém o sal
         except Exception:
             print("AVISO: PAUTA_SENHA não abre o data.js atual; gerando sal novo (quem estiver logado digita a senha de novo).")
+    if semanas:   # semana nova substitui a anterior inteira (a mais recente vale)
+        p = semanas[-1]
+        dias = {d: t for d, t in p["dias"].items() if re.fullmatch(r"\d{4}-\d{2}-\d{2}", d)}
+        if not dias:
+            sys.exit("ERRO: a semana enviada não tem dias válidos.")
+        novo = {"fonte": p.get("fonte", ""), "dias": dias, "pessoas": p.get("pessoas", [])}
+    elif vigente:
+        novo = vigente
+        dias = novo["dias"]
+    else:
+        sys.exit("ERRO: trocas exigem um data.js que a PAUTA_SENHA abra.")
+    for t in trocas:   # trocas pontuais: só o trecho exato, preserva o resto (inclusive correções da página)
+        alvo = t.get("dias") or list(dias)
+        feitas = 0
+        for d in alvo:
+            if d in dias and t["de"] in dias[d]:
+                dias[d] = dias[d].replace(t["de"], t["para"]); feitas += 1
+        print(f"troca em {feitas} dia(s): {t['de'][:50]!r}")
+    novo["geradoEm"] = datetime.now(BRT).strftime("%Y-%m-%dT%H:%M")
     chave = hashlib.pbkdf2_hmac("sha256", senha.encode(), sal, it, 32)
-    novo = {"geradoEm": datetime.now(BRT).strftime("%Y-%m-%dT%H:%M"), "fonte": pacote.get("fonte", ""),
-            "dias": dias, "pessoas": pacote.get("pessoas", [])}
     iv = os.urandom(12)
     corpo = AESGCM(chave).encrypt(iv, json.dumps(novo, ensure_ascii=False).encode("utf-8"), None)
     env = {"v": 1, "iter": it, "sal": b64e(sal), "iv": b64e(iv), "dados": b64e(corpo)}
@@ -67,7 +84,7 @@ def main():
     for e in entradas:
         os.remove(e)
     # pedidos/propostas de dias que saíram da página não servem mais
-    for pasta in ("pedidos", "propostas"):
+    for pasta in (("pedidos", "propostas") if semanas else ()):
         for f in glob.glob(os.path.join(RAIZ, pasta, "*.json")):
             if os.path.basename(f)[:10] not in dias:
                 os.remove(f)

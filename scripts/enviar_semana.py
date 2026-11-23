@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Cifra a semana com a CHAVE PÚBLICA do repositório e grava em entrada/ (quem publica é o Action).
 
-Uso: python scripts/enviar_semana.py textos.json pessoas.txt
+Uso: python scripts/enviar_semana.py textos.json pessoas.txt        (substitui a semana)
+     python scripts/enviar_semana.py --trocas trocas.json             (troca trechos exatos na pauta publicada)
+trocas.json: [{"de": "texto atual", "para": "texto novo", "dias": ["AAAA-MM-DD", ...]}]  ("dias" opcional)
 Não precisa da senha da página: só o Action, com a chave privada (segredo PAUTA_CHAVE_PRIVADA), abre o arquivo.
 """
 import base64, json, os, sys
@@ -25,11 +27,16 @@ def ler_pessoas(caminho):
 
 
 def main():
-    textos, pessoas = sys.argv[1], sys.argv[2]
-    dias = json.load(open(textos, encoding="utf-8"))
-    for d in dias:
-        datetime.strptime(d, "%Y-%m-%d")
-    pacote = {"dias": dias, "pessoas": ler_pessoas(pessoas), "fonte": os.path.basename(textos)}
+    if sys.argv[1] == "--trocas":
+        trocas = json.load(open(sys.argv[2], encoding="utf-8"))
+        assert all(t.get("de") and "para" in t for t in trocas), "cada troca precisa de 'de' e 'para'"
+        pacote, dias = {"trocas": trocas}, {}
+    else:
+        textos, pessoas = sys.argv[1], sys.argv[2]
+        dias = json.load(open(textos, encoding="utf-8"))
+        for d in dias:
+            datetime.strptime(d, "%Y-%m-%d")
+        pacote = {"dias": dias, "pessoas": ler_pessoas(pessoas), "fonte": os.path.basename(textos)}
     pub = serialization.load_pem_public_key(open(os.path.join(RAIZ, "chave-publica.pem"), "rb").read())
     efemera = X25519PrivateKey.generate()
     segredo = efemera.exchange(pub)
@@ -41,7 +48,10 @@ def main():
     destino = os.path.join(RAIZ, "entrada", f"semana-{datetime.now():%Y%m%d-%H%M%S}.json")
     json.dump({"v": 1, "alg": "X25519-HKDF-SHA256-AESGCM", "epk": b64(epk), "iv": b64(iv), "dados": b64(corpo)},
               open(destino, "w", encoding="utf-8"))
-    print(f"{destino} | {len(dias)} dias ({min(dias)} a {max(dias)}) | {len(pacote['pessoas'])} pessoas")
+    if "trocas" in pacote:
+        print(f"{destino} | {len(pacote['trocas'])} troca(s)")
+    else:
+        print(f"{destino} | {len(dias)} dias ({min(dias)} a {max(dias)}) | {len(pacote['pessoas'])} pessoas")
 
 
 if __name__ == "__main__":
