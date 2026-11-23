@@ -2,7 +2,9 @@
 
 Página interna, cifrada (AES-256-GCM, chave por PBKDF2 a partir da senha). O repositório é público: só vão para cá arquivos cifrados (`data.js`, `pedidos/`, `propostas/`). Textos legíveis e lista de pessoas ficam no seu computador (`.gitignore`).
 
-**Semana nova (sem instalar nada)**
+**Semana nova pelo Claude:** os arquivos da semana são enviados no chat; o Claude monta a pauta, cifra com `chave-publica.pem` (`scripts/enviar_semana.py`) e grava em `entrada/`. O Action "Publicar semana" abre com o segredo `PAUTA_CHAVE_PRIVADA` e gera o `data.js` com `PAUTA_SENHA`. A semana anterior sai.
+
+**Semana nova sem o Claude (sem instalar nada)**
 1. Abra `gerar.html`, escolha o `textos*.json` da semana e o `pessoas.txt`, digite a senha e clique em "Gerar e baixar data.js".
 2. No GitHub: Add file → Upload files → envie só o `data.js` → Commit changes.
 

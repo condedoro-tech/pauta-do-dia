@@ -6,3 +6,5 @@ correcoes*.json
 pessoas.txt
 *.xlsx
 __pycache__/
+# chave privada: só no segredo PAUTA_CHAVE_PRIVADA do GitHub
+*privada*

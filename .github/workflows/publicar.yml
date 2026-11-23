@@ -1,0 +1,49 @@
+# Publica a semana enviada (entrada/*.json, cifrada com a chave pública) no data.js da página.
+# Segredos: PAUTA_CHAVE_PRIVADA (abre a entrada) e PAUTA_SENHA (a senha da página).
+name: Publicar semana
+
+on:
+  push:
+    branches: [main]
+    paths: ["entrada/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pauta
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instala a cifra
+        run: pip install --quiet cryptography
+
+      - name: Gera o data.js
+        env:
+          PAUTA_CHAVE_PRIVADA: ${{ secrets.PAUTA_CHAVE_PRIVADA }}
+          PAUTA_SENHA: ${{ secrets.PAUTA_SENHA }}
+        run: python scripts/importar_semana.py | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Grava
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data.js entrada pedidos propostas
+          if git diff --cached --quiet; then echo "Nada mudou"; exit 0; fi
+          git commit -m "Semana publicada"
+          for i in 1 2 3; do
+            git pull --rebase --quiet && git push && exit 0
+            sleep 5
+          done
+          exit 1
